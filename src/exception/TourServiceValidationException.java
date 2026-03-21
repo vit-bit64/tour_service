@@ -1,6 +1,7 @@
-package model;
+package exception;
 
-public class TourServiceValidationException extends RuntimeException {
+public class TourServiceValidationException extends Exception {
+
     public TourServiceValidationException(String message) {
         super(message);
     }

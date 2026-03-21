@@ -7,27 +7,23 @@ public class Flight extends TourService {
     private String origin;
     private String destination;
     private String flightNumber;
-    private boolean baggageInclude;
+    private boolean baggageIncluded;
+
 
     public Flight() {
         super();
     }
 
     public Flight(Integer id, String name, BigDecimal price, LocalDate from, LocalDate to,
-                  String origin, String destination, String flightNumber, boolean baggageInclude) {
+                  String origin, String destination, String flightNumber, boolean baggageIncluded) {
         super(id, name, price, from, to);
         this.origin = origin;
         this.destination = destination;
         this.flightNumber = flightNumber;
-        this.baggageInclude = baggageInclude;
+        this.baggageIncluded = baggageIncluded;
     }
 
-    @Override
-    public BigDecimal calculateTotalPrice(int participants) {
-        var totalPrice = getPrice().multiply(BigDecimal.valueOf(participants));
-        return baggageInclude ? totalPrice.multiply(new BigDecimal("1.3")) : totalPrice;
-    }
-
+    // Getters and Setters
     public String getOrigin() {
         return origin;
     }
@@ -52,16 +48,30 @@ public class Flight extends TourService {
         this.flightNumber = flightNumber;
     }
 
-    public boolean isBaggageInclude() {
-        return baggageInclude;
+    public boolean isBaggageIncluded() {
+        return baggageIncluded;
     }
 
-    public void setBaggageInclude(boolean baggageInclude) {
-        this.baggageInclude = baggageInclude;
+    public void setBaggageIncluded(boolean baggageIncluded) {
+        this.baggageIncluded = baggageIncluded;
+    }
+
+    @Override
+    public BigDecimal calculateTotalPrice(int participants) {
+        var totalPrice = getPrice().multiply(BigDecimal.valueOf(participants));
+        return baggageIncluded ? totalPrice.multiply(new BigDecimal("1.3")) : totalPrice;
     }
 
     @Override
     public String toString() {
-        return "Flight{" + "id=" + getId() + ", name=" + getName() + ", price=" + getPrice() + ", from=" + getFrom() + ", to=" + getTo() + ", origin='" + origin + '\'' + ", destination='" + destination + '\'' + ", flightNumber='" + flightNumber + '\'' + ", baggageInclude=" + baggageInclude + '}';
+        String parentString = super.toString();
+        String baseString = parentString.substring(0, parentString.length() - 1);
+
+        return baseString +
+                ", origin=\"" + origin + "\"" +
+                ", destination=\"" + destination + "\"" +
+                ", flightNumber=\"" + flightNumber + "\"" +
+                ", baggageIncluded=" + baggageIncluded +
+                "}";
     }
 }

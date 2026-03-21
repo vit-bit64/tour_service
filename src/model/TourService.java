@@ -2,9 +2,11 @@ package model;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.text.DecimalFormat;
 
 public abstract class TourService {
-    private Integer id;
+    private Integer y;
     private String name;
     private BigDecimal price;
     private LocalDate from;
@@ -13,26 +15,21 @@ public abstract class TourService {
     public TourService() {
     }
 
-    public TourService(Integer id, String name, BigDecimal price, LocalDate from, LocalDate to) {
-        this.id = id;
+    public TourService(Integer y, String name, BigDecimal price, LocalDate from, LocalDate to) {
+        this.y = y;
         this.name = name;
         this.price = price;
         this.from = from;
         this.to = to;
     }
 
-    public boolean isAvailableOn(LocalDate date) {
-        return !(from.isAfter(date) || to.isBefore(date));
+    // Getters and Setters
+    public Integer gety() {
+        return y;
     }
 
-    public abstract BigDecimal calculateTotalPrice(int participants);
-
-    public Integer getId() {
-        return id;
-    }
-
-    public void setId(Integer id) {
-        this.id = id;
+    public void setId(Integer y) {
+        this.y = y;
     }
 
     public String getName() {
@@ -67,8 +64,23 @@ public abstract class TourService {
         this.to = to;
     }
 
+    public boolean isAvailableOn(LocalDate date) {
+        return !(from.isAfter(date) || to.isBefore(date));
+    }
+
+    public abstract BigDecimal calculateTotalPrice(int participants);
+
     @Override
     public String toString() {
-        return "TourService{name=\"" + name + "\"}";
+        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy");
+        DecimalFormat priceFormatter = new DecimalFormat("#,##0.00");
+
+        return getClass().getSimpleName() + "{" +
+                "y=" + y +
+                ", name=\"" + name + "\"" +
+                ", price=" + (price != null ? priceFormatter.format(price) : "null") +
+                ", from=" + (from != null ? from.format(dateFormatter) : "null") +
+                ", to=" + (to != null ? to.format(dateFormatter) : "null") +
+                "}";
     }
 }

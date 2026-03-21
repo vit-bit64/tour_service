@@ -1,8 +1,10 @@
 package model;
 
+import exception.TourServiceValidationException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
@@ -20,205 +22,219 @@ public class Booking {
     private final LocalDate bookingDate;
     private Status status;
 
-    public Booking(Client client, Map<TourService, Integer> serviceParticipants) {
-        validate(client, serviceParticipants);
+    private static final Random random = new Random();
+    private static final DateTimeFormatter TIMESTAMP_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+
+    public Booking(Client client, Map<TourService, Integer> serviceParticipants)
+            throws TourServiceValidationException {
+
+        validateClient(client);
+        validateServiceParticipants(serviceParticipants);
 
         this.client = client;
         this.serviceParticipants = new HashMap<>(serviceParticipants);
         this.bookingDate = LocalDate.now();
-        this.status = Status.PENDING;
         this.bookingId = generateBookingId();
+        this.status = Status.PENDING;
     }
 
-    private void validate(Client client, Map<TourService, Integer> serviceParticipants) {
+    // Валидационные методы
+    private void validateClient(Client client) throws TourServiceValidationException {
         if (client == null) {
-            throw new IllegalArgumentException("Клиент не может быть null");
+            throw new TourServiceValidationException("Клиент не может быть null");
         }
+    }
 
-        if (serviceParticipants == null || serviceParticipants.isEmpty()) {
-            throw new IllegalArgumentException("Список услуг не может быть null или пустым");
+    private void validateServiceParticipants(Map<TourService, Integer> services)
+            throws TourServiceValidationException {
+
+        if (services == null || services.isEmpty()) {
+            throw new TourServiceValidationException(
+                    "Список услуг не может быть null или пустым"
+            );
         }
 
         LocalDate today = LocalDate.now();
-
-        for (Map.Entry<TourService, Integer> entry : serviceParticipants.entrySet()) {
+        for (Map.Entry<TourService, Integer> entry : services.entrySet()) {
             TourService service = entry.getKey();
             Integer participants = entry.getValue();
 
-            if (service == null) {
-                throw new IllegalArgumentException("Услуга не может быть null");
-            }
+            validateServiceNotNull(service);
+            validateServiceAvailability(service, today);
+            validateParticipantsCount(service, participants);
+            validateHotelStayCapacity(service, participants);
+        }
+    }
 
-            if (participants == null || participants <= 0) {
-                throw new IllegalArgumentException("Количество участников должно быть положительным для услуги: " + service);
-            }
+    private void validateServiceNotNull(TourService service) throws TourServiceValidationException {
+        if (service == null) {
+            throw new TourServiceValidationException("Обнаружена null услуга");
+        }
+    }
 
-            if (!service.isAvailableOn(today)) {
-                throw new IllegalArgumentException("Услуга недоступна на текущую дату: " + service);
-            }
+    private void validateServiceAvailability(TourService service, LocalDate date)
+            throws TourServiceValidationException {
+        if (!service.isAvailableOn(date)) {
+            throw new TourServiceValidationException(
+                    "Услуга \"" + service.getName() + "\" недоступна на " + date
+            );
+        }
+    }
 
-            if (service instanceof HotelStay) {
-                HotelStay hotelStay = (HotelStay) service;
-                int maxParticipants = getMaxParticipantsForHotel(hotelStay);
-                if (participants > maxParticipants) {
-                    throw new IllegalArgumentException(
-                            "Для HotelStay с типом номера максимальное количество участников: " + maxParticipants +
-                                    ", получено: " + participants
-                    );
-                }
+    private void validateParticipantsCount(TourService service, Integer participants)
+            throws TourServiceValidationException {
+        if (participants == null || participants <= 0) {
+            throw new TourServiceValidationException(
+                    "Количество участников для \"" + service.getName() +
+                            "\" должно быть положительным, текущее: " + participants
+            );
+        }
+    }
+
+    private void validateHotelStayCapacity(TourService service, int participants)
+            throws TourServiceValidationException {
+        if (service instanceof HotelStay hotel) {
+            int max = switch (hotel.getRoomType()) {
+                case SINGLE -> 1;
+                case DOUBLE -> 2;
+                case FAMILY -> 4;
+                case null -> 1;
+            };
+            if (participants > max) {
+                throw new TourServiceValidationException(
+                        "Для \"" + service.getName() + "\" макс. участников: " + max +
+                                ", передано: " + participants
+                );
             }
         }
     }
 
-    private int getMaxParticipantsForHotel(HotelStay hotelStay) {
-        RoomType roomType = hotelStay.getRoomType();
-        switch (roomType) {
-            case SINGLE: return 1;
-            case DOUBLE: return 2;
-            case FAMILY: return 4;
-            default: return Integer.MAX_VALUE;
+    private void checkPendingStatus() throws TourServiceValidationException {
+        if (status != Status.PENDING) {
+            throw new TourServiceValidationException(
+                    "Операция доступна только в статусе PENDING, текущий: " + status
+            );
         }
     }
 
     private String generateBookingId() {
-        String timestamp = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        Random random = new Random();
-        int randomDigits = 1000 + random.nextInt(9000);
-        return "BK" + timestamp + randomDigits;
+        return "BK" + LocalDateTime.now().format(TIMESTAMP_FORMATTER) +
+                (1000 + random.nextInt(9000));
     }
 
-    public String getBookingId() {
-        return bookingId;
-    }
-
-    public Client getClient() {
-        return client;
-    }
-
-    public Map<TourService, Integer> getServiceParticipants() {
-        return new HashMap<>(serviceParticipants);
-    }
-
-    public LocalDate getBookingDate() {
-        return bookingDate;
-    }
-
-    public Status getStatus() {
-        return status;
-    }
-
-    public void addService(TourService service, int participants) {
-        if (status != Status.PENDING) {
-            throw new IllegalStateException("Нельзя добавить услугу, когда бронирование не в статусе PENDING");
-        }
-
-        if (service == null) {
-            throw new IllegalArgumentException("Услуга не может быть null");
-        }
-
-        if (participants <= 0) {
-            throw new IllegalArgumentException("Количество участников должно быть положительным");
-        }
-
-        if (!service.isAvailableOn(LocalDate.now())) {
-            throw new IllegalArgumentException("Услуга недоступна на текущую дату");
-        }
-
-        if (service instanceof HotelStay) {
-            int maxParticipants = getMaxParticipantsForHotel((HotelStay) service);
-            if (participants > maxParticipants) {
-                throw new IllegalArgumentException(
-                        "Для HotelStay с типом номера максимальное количество участников: " + maxParticipants
-                );
-            }
-        }
+    // Основные методы
+    public void addService(TourService service, int participants)
+            throws TourServiceValidationException {
+        checkPendingStatus();
+        validateServiceNotNull(service);
+        validateParticipantsCount(service, participants);
+        validateServiceAvailability(service, LocalDate.now());
+        validateHotelStayCapacity(service, participants);
 
         serviceParticipants.put(service, participants);
     }
 
-    public void removeService(TourService service) {
-        if (status != Status.PENDING) {
-            throw new IllegalStateException("Нельзя удалить услугу, когда бронирование не в статусе PENDING");
-        }
+    public void removeService(TourService service) throws TourServiceValidationException {
+        checkPendingStatus();
+        validateServiceNotNull(service);
 
-        if (service == null) {
-            throw new IllegalArgumentException("Услуга не может быть null");
+        if (!serviceParticipants.containsKey(service)) {
+            throw new TourServiceValidationException(
+                    "Услуга \"" + service.getName() + "\" не найдена"
+            );
         }
 
         serviceParticipants.remove(service);
+
+        if (serviceParticipants.isEmpty()) {
+            throw new TourServiceValidationException("Бронирование не может остаться без услуг");
+        }
     }
 
-    public void updateParticipants(TourService service, int participants) {
-        if (status != Status.PENDING) {
-            throw new IllegalStateException("Нельзя обновить количество участников, когда бронирование не в статусе PENDING");
-        }
-
-        if (service == null) {
-            throw new IllegalArgumentException("Услуга не может быть null");
-        }
+    public void updateParticipants(TourService service, int participants)
+            throws TourServiceValidationException {
+        checkPendingStatus();
 
         if (!serviceParticipants.containsKey(service)) {
-            throw new IllegalArgumentException("Услуга не найдена в бронировании");
+            throw new TourServiceValidationException(
+                    "Услуга \"" + service.getName() + "\" не найдена"
+            );
         }
 
-        if (participants <= 0) {
-            throw new IllegalArgumentException("Количество участников должно быть положительным");
-        }
-
-        if (service instanceof HotelStay) {
-            int maxParticipants = getMaxParticipantsForHotel((HotelStay) service);
-            if (participants > maxParticipants) {
-                throw new IllegalArgumentException(
-                        "Для HotelStay с типом номера максимальное количество участников: " + maxParticipants
-                );
-            }
-        }
+        validateParticipantsCount(service, participants);
+        validateHotelStayCapacity(service, participants);
 
         serviceParticipants.put(service, participants);
     }
 
-    public BigDecimal calculateTotalWithDiscount() {
-        BigDecimal total = BigDecimal.ZERO;
-
-        for (Map.Entry<TourService, Integer> entry : serviceParticipants.entrySet()) {
-            TourService service = entry.getKey();
-            int participants = entry.getValue();
-            total = total.add(service.calculateTotalPrice(participants));
-        }
-
-        BigDecimal discountMultiplier = client.getDiscountMultiplier();
-        return total.multiply(discountMultiplier).setScale(2, RoundingMode.HALF_UP);
-    }
-
-    public void confirm() {
+    public void confirm() throws TourServiceValidationException {
         if (status != Status.PENDING) {
-            throw new IllegalStateException("Нельзя подтвердить бронирование: текущий статус " + status);
+            throw new TourServiceValidationException(
+                    "Подтверждение возможно только из PENDING, текущий: " + status
+            );
         }
-        this.status = Status.CONFIRMED;
+        status = Status.CONFIRMED;
     }
 
-    public void complete() {
+    public void complete() throws TourServiceValidationException {
         if (status != Status.CONFIRMED) {
-            throw new IllegalStateException("Нельзя завершить бронирование: текущий статус " + status);
+            throw new TourServiceValidationException(
+                    "Завершение возможно только из CONFIRMED, текущий: " + status
+            );
         }
 
-        BigDecimal totalPrice = calculateTotalWithDiscount();
-        int pointsToAdd = totalPrice.multiply(new BigDecimal("0.1")).intValue();
+        client.addLoyaltyPoints(
+                calculateTotalPrice()
+                        .multiply(BigDecimal.valueOf(0.1))
+                        .setScale(0, RoundingMode.DOWN)
+                        .intValue()
+        );
 
-        client.addLoyaltyPoints(pointsToAdd);
-
-        this.status = Status.COMPLETED;
+        status = Status.COMPLETED;
     }
 
-    public void cancel() {
+    public void cancel() throws TourServiceValidationException {
         if (status != Status.PENDING && status != Status.CONFIRMED) {
-            throw new IllegalStateException("Нельзя отменить бронирование: текущий статус " + status);
+            throw new TourServiceValidationException(
+                    "Отмена возможна только из PENDING или CONFIRMED, текущий: " + status
+            );
         }
-        this.status = Status.CANCELLED;
+        status = Status.CANCELLED;
+    }
+
+    public BigDecimal calculateTotalPrice() {
+        return serviceParticipants.entrySet().stream()
+                .map(e -> e.getKey().calculateTotalPrice(e.getValue()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .multiply(BigDecimal.ONE.subtract(client.getDiscountRate()))
+                .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    // Getters
+    public String getBookingId() { return bookingId; }
+    public Client getClient() { return client; }
+    public Map<TourService, Integer> getServiceParticipants() { return new HashMap<>(serviceParticipants); }
+    public LocalDate getBookingDate() { return bookingDate; }
+    public Status getStatus() { return status; }
+    public int getTotalParticipants() {
+        return serviceParticipants.values().stream().mapToInt(Integer::intValue).sum();
     }
 
     @Override
     public String toString() {
-        return "Booking{" + "bookingId='" + bookingId + '\'' + ", client=" + client + ", serviceParticipants=" + serviceParticipants + ", bookingDate=" + bookingDate + ", status=" + status + '}';
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("Booking{id='%s', date=%s, status=%s, client=%s, discount=%s%%, total=%.2f, services=[\n",
+                bookingId, bookingDate, status, client.getFullName(),
+                client.getDiscountRate().multiply(BigDecimal.valueOf(100)).setScale(0),
+                calculateTotalPrice()));
+
+        serviceParticipants.forEach((service, participants) ->
+                sb.append(String.format("  %s x%d = %.2f\n",
+                        service.getName(), participants,
+                        service.calculateTotalPrice(participants)))
+        );
+
+        return sb.append("]}").toString();
     }
 }
